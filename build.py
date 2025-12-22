@@ -35,7 +35,7 @@ NON_WINDOWS_TARGETS = [
 DIST_DIR = "dist"
 
 # 配置文件路径
-TOOLS_CONFIG = "tools.toml"
+TOOLS_CONFIG = "config/tools.toml"
 
 
 def load_tools_config():
@@ -144,6 +144,57 @@ def get_installed_binaries(tool, target):
     return installed_binaries
 
 
+def get_installed_version(tool):
+    """获取已安装工具的实际版本"""
+    try:
+        # 方法1: 使用 cargo install --list
+        result = run_command("cargo install --list", check=False, capture_output=True)
+        if result.returncode == 0 and result.stdout:
+            for line in result.stdout.split('\n'):
+                line = line.strip()
+                # cargo install --list 输出格式: "tool_name v0.1.0:" 或 "cargo-tool_name v0.1.0:"
+                if line.startswith(f"{tool} ") or line.startswith(f"cargo-{tool} "):
+                    # 提取版本号
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        version = parts[1].rstrip(':')
+                        if not version.startswith('v'):
+                            version = f"v{version}"
+                        return version
+        
+        # 方法2: 尝试运行二进制文件的 --version（先尝试 Windows 格式，再尝试 Linux 格式）
+        cargo_bin = get_cargo_bin()
+        
+        # 尝试不同的扩展名
+        for exe_ext in ['.exe', '']:
+            binary_name = f"{tool}{exe_ext}"
+            binary_path = cargo_bin / binary_name
+            
+            if not binary_path.exists():
+                binary_name = f"cargo-{tool}{exe_ext}"
+                binary_path = cargo_bin / binary_name
+            
+            if binary_path.exists():
+                try:
+                    result = run_command(f'"{binary_path}" --version', check=False, capture_output=True)
+                    if result.returncode == 0 and result.stdout:
+                        # 版本输出格式通常是 "tool_name 0.1.0" 或 "tool_name v0.1.0"
+                        output = result.stdout.strip()
+                        parts = output.split()
+                        if len(parts) >= 2:
+                            version = parts[-1]
+                            if not version.startswith('v'):
+                                version = f"v{version}"
+                            return version
+                except Exception:
+                    continue
+        
+        return "unknown"
+    except Exception as e:
+        print(f"  警告: 无法获取版本信息: {e}")
+        return "unknown"
+
+
 def run_command(cmd, check=True, capture_output=False):
     """运行命令"""
     try:
@@ -218,6 +269,14 @@ def build_tool(tool, target):
     
     if copied_files:
         print(f"  ✓ 成功编译 {tool} 到 {target}，共 {len(copied_files)} 个二进制文件")
+        
+        # 获取实际安装的版本并保存到工具目录
+        actual_version = get_installed_version(tool)
+        tool_dir = get_output_dir(tool, target).parent
+        version_file = tool_dir / "version"
+        with open(version_file, 'w', encoding='utf-8') as f:
+            f.write(actual_version)
+        print(f"  ✓ 版本信息: {actual_version} -> {version_file}")
     else:
         print(f"  ✗ 错误: 无法复制任何二进制文件")
         sys.exit(1)

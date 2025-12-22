@@ -1,3 +1,11 @@
+# 处理流程
+# 1. 安装 target 工具链
+# 2. 下载 rust-analyzer
+# 3. 编译所有工具
+# 4. 后处理, 主要是打包为 zip 文件
+# 5. 发布
+
+
 
 install-toolchains:
     python build.py install-targets
@@ -28,6 +36,9 @@ post:
 
 
 download:
-    # download rust-analyzer
-    python download.py --date 2025-12-15
+    # download rust-analyzer, mingw 
+    python download.py 
+
+
+
 

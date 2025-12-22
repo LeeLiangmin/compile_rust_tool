@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-下载脚本：从 GitHub releases 下载 rust-analyzer
+下载脚本：从 GitHub releases 下载文件
+支持从 download.toml 配置文件读取下载任务
 """
 
 import os
@@ -13,10 +14,30 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
 # 配置
-GITHUB_REPO = "rust-lang/rust-analyzer"
-ARTIFACTS_DIR = "artifacts"
-TARGET_FILE = "rust-analyzer-win32-x64.vsix"
-OUTPUT_DIR = Path(ARTIFACTS_DIR) / "rust-analyzer"
+DIST_DIR = "dist"
+DOWNLOAD_CONFIG = "config/download.toml"
+
+
+def load_download_config():
+    """加载 download.toml 配置文件"""
+    try:
+        # 尝试使用 Python 3.11+ 的 tomllib
+        import tomllib
+        with open(DOWNLOAD_CONFIG, 'rb') as f:
+            return tomllib.load(f)
+    except ImportError:
+        try:
+            # 尝试使用 toml 包
+            import toml
+            with open(DOWNLOAD_CONFIG, 'r', encoding='utf-8') as f:
+                return toml.load(f)
+        except ImportError:
+            print("错误: 需要 tomllib (Python 3.11+) 或 toml 包")
+            print("安装 toml 包: pip install toml")
+            sys.exit(1)
+    except FileNotFoundError:
+        print(f"错误: 找不到配置文件 {DOWNLOAD_CONFIG}")
+        sys.exit(1)
 
 
 def fetch_json(url):
@@ -39,9 +60,9 @@ def fetch_json(url):
         return None
 
 
-def get_release_by_date(date_str):
+def get_release_by_date(repo, date_str):
     """根据日期获取 release"""
-    api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
+    api_url = f"https://api.github.com/repos/{repo}/releases"
     
     releases = fetch_json(api_url)
     if not releases:
@@ -77,9 +98,15 @@ def get_release_by_date(date_str):
         return None
 
 
-def get_release_by_tag(tag):
+def get_release_by_tag(repo, tag):
     """根据标签获取 release"""
-    api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{tag}"
+    api_url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
+    return fetch_json(api_url)
+
+
+def get_latest_release(repo):
+    """获取最新 release"""
+    api_url = f"https://api.github.com/repos/{repo}/releases/latest"
     return fetch_json(api_url)
 
 
@@ -145,66 +172,129 @@ def download_file(url, output_path):
         return False
 
 
+def download_item(item_name, item_config):
+    """下载单个配置项"""
+    print(f"\n处理下载项: {item_name}")
+    print(f"  Repository: {item_config.get('repo', 'unknown')}")
+    print(f"  文件: {item_config.get('file', 'unknown')}")
+    
+    repo = item_config.get('repo')
+    filename = item_config.get('file')
+    output_dir = item_config.get('output_dir', item_name)
+    method = item_config.get('method', 'latest')
+    
+    if not repo or not filename:
+        print(f"  错误: 配置项 {item_name} 缺少 repo 或 file 字段")
+        return False
+    
+    # 获取 release
+    release = None
+    if method == 'latest':
+        release = get_latest_release(repo)
+        if release:
+            print(f"  找到最新 release: {release['tag_name']}")
+        else:
+            print(f"  错误: 无法获取最新 release")
+            return False
+    elif method == 'date':
+        date_str = item_config.get('date')
+        if not date_str:
+            print(f"  错误: method 为 date 但未提供 date 字段")
+            return False
+        release = get_release_by_date(repo, date_str)
+        if release:
+            print(f"  找到 release: {release['tag_name']} (发布于 {date_str})")
+    elif method == 'tag':
+        tag = item_config.get('tag')
+        if not tag:
+            print(f"  错误: method 为 tag 但未提供 tag 字段")
+            return False
+        release = get_release_by_tag(repo, tag)
+        if release:
+            print(f"  找到 release: {release['tag_name']}")
+    else:
+        print(f"  错误: 未知的 method: {method}")
+        return False
+    
+    if not release:
+        print(f"  错误: 未找到指定的 release")
+        return False
+    
+    # 查找下载 URL
+    download_url = find_asset_url(release, filename)
+    if not download_url:
+        return False
+    
+    # 下载文件
+    output_path = Path(DIST_DIR) / output_dir / filename
+    print(f"  目标文件: {output_path}")
+    
+    if download_file(download_url, output_path):
+        print(f"  ✓ 成功下载到: {output_path}")
+        return True
+    else:
+        return False
+
+
 def main():
     """主函数"""
     import argparse
     
     parser = argparse.ArgumentParser(
-        description='从 GitHub releases 下载 rust-analyzer',
+        description='从 GitHub releases 下载文件（支持配置文件）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python download.py --date 2025-12-15
-  python download.py --tag 2024-12-15
-  python download.py --latest
+  python download.py                    # 下载所有配置项
+  python download.py rust-analyzer      # 下载指定项
+  python download.py --list              # 列出所有配置项
         """
     )
     
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--date', help='按发布日期下载 (格式: YYYY-MM-DD)')
-    group.add_argument('--tag', help='按标签下载 (例如: 2024-12-15)')
-    group.add_argument('--latest', action='store_true', help='下载最新版本')
+    parser.add_argument('item', nargs='?', help='要下载的配置项名称（不指定则下载所有）')
+    parser.add_argument('--list', action='store_true', help='列出所有配置项')
     
     args = parser.parse_args()
     
-    # 获取 release
-    release = None
-    if args.latest:
-        api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-        release = fetch_json(api_url)
-        if release:
-            print(f"找到最新 release: {release['tag_name']}")
-        else:
-            print("错误: 无法获取最新 release")
+    # 加载配置
+    config = load_download_config()
+    downloads = config.get('downloads', {})
+    
+    if args.list:
+        print("可用的下载项:")
+        for item_name, item_config in downloads.items():
+            repo = item_config.get('repo', 'unknown')
+            file = item_config.get('file', 'unknown')
+            method = item_config.get('method', 'latest')
+            print(f"  - {item_name}: {repo} / {file} (method: {method})")
+        return
+    
+    if args.item:
+        # 下载指定项
+        if args.item not in downloads:
+            print(f"错误: 未找到配置项 '{args.item}'")
+            print("使用 --list 查看所有可用项")
             sys.exit(1)
-    elif args.date:
-        release = get_release_by_date(args.date)
-        if release:
-            print(f"找到 release: {release['tag_name']} (发布于 {args.date})")
-    elif args.tag:
-        release = get_release_by_tag(args.tag)
-        if release:
-            print(f"找到 release: {release['tag_name']}")
-    
-    if not release:
-        print("错误: 未找到指定的 release")
-        sys.exit(1)
-    
-    # 查找下载 URL
-    download_url = find_asset_url(release, TARGET_FILE)
-    if not download_url:
-        sys.exit(1)
-    
-    # 下载文件
-    output_path = OUTPUT_DIR / TARGET_FILE
-    print(f"\n目标文件: {output_path}")
-    
-    if download_file(download_url, output_path):
-        print(f"\n✓ 成功下载到: {output_path}")
+        
+        success = download_item(args.item, downloads[args.item])
+        sys.exit(0 if success else 1)
     else:
-        sys.exit(1)
+        # 下载所有项
+        print(f"开始下载所有配置项...")
+        print("=" * 60)
+        
+        success_count = 0
+        fail_count = 0
+        
+        for item_name, item_config in downloads.items():
+            if download_item(item_name, item_config):
+                success_count += 1
+            else:
+                fail_count += 1
+        
+        print("=" * 60)
+        print(f"下载完成！成功: {success_count}, 失败: {fail_count}")
 
 
 if __name__ == '__main__':
     main()
-

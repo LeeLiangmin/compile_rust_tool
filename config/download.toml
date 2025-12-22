@@ -1,0 +1,30 @@
+# 下载配置文件
+# 定义需要从 GitHub releases 下载的文件
+
+[downloads.rust-analyzer]
+# rust-analyzer 下载配置
+repo = "rust-lang/rust-analyzer"
+file = "rust-analyzer-win32-x64.vsix"
+output_dir = "rust-analyzer"
+# 下载方式: date, tag, latest
+method = "date"
+# 如果 method 是 date，使用 date 字段
+date = "2025-12-15"
+# 如果 method 是 tag，使用 tag 字段
+# tag = "2024-12-15"
+# 如果 method 是 latest，不需要 date 或 tag
+
+[downloads.mingw-builds-binaries]
+# mingw-builds-binaries 下载配置
+repo = "niXman/mingw-builds-binaries"
+file = "x86_64-15.2.0-release-posix-seh-ucrt-rt_v13-rev0.7z"
+output_dir = "mingw-builds-binaries"
+method = "tag"
+tag = "15.2.0-rt_v13-rev0"
+# 也可以使用 date
+# date = "2024-08-13"
+
+
+[downloads.cargo-nextest]
+
+

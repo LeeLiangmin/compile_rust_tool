@@ -145,7 +145,7 @@ python build.py add-tool ripgrep
 
 ### 方法 2：手动编辑配置文件
 
-编辑 `tools.toml` 文件，在 `[tools]` 部分添加新工具：
+编辑 `config/tools.toml` 文件，在 `[tools]` 部分添加新工具：
 
 ```toml
 [tools]
@@ -203,7 +203,7 @@ pip install toml
 
 ### Q: 如何指定工具的特定版本？
 
-A: 编辑 `tools.toml` 文件，修改对应工具的版本：
+A: 编辑 `config/tools.toml` 文件，修改对应工具的版本：
 ```toml
 flamegraph = { version = "0.4.1" }
 ```
