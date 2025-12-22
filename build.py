@@ -232,6 +232,39 @@ def build_tool(tool, target):
     print(f"  检查目标工具链 {target}...")
     run_command(f"rustup target add {target}", check=False)
     
+    # 配置交叉编译链接器
+    env = os.environ.copy()
+    if target == "aarch64-unknown-linux-gnu":
+        # 检查交叉编译工具链是否已安装
+        result = subprocess.run(
+            "which aarch64-linux-gnu-gcc",
+            shell=True,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            print(f"  ⚠ 警告: 未找到 aarch64-linux-gnu-gcc 交叉编译工具链")
+            print(f"     请安装: sudo apt-get install gcc-aarch64-linux-gnu")
+            print(f"     或: sudo yum install gcc-aarch64-linux-gnu")
+        else:
+            env["CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER"] = "aarch64-linux-gnu-gcc"
+            print(f"  ✓ 已配置链接器: aarch64-linux-gnu-gcc")
+    elif target == "x86_64-pc-windows-gnu":
+        # 检查 MinGW 交叉编译工具链
+        result = subprocess.run(
+            "which x86_64-w64-mingw32-gcc",
+            shell=True,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            print(f"  ⚠ 警告: 未找到 x86_64-w64-mingw32-gcc 交叉编译工具链")
+            print(f"     请安装: sudo apt-get install mingw-w64")
+            print(f"     或: sudo yum install mingw64-gcc")
+        else:
+            env["CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER"] = "x86_64-w64-mingw32-gcc"
+            print(f"  ✓ 已配置链接器: x86_64-w64-mingw32-gcc")
+    
     # 获取版本
     version = get_tool_version(tool)
     version_flag = f"--version {version}" if version != "latest" else ""
@@ -247,7 +280,17 @@ def build_tool(tool, target):
     else:
         cmd = f"cargo install --target {target} {tool} --force"
     
-    run_command(cmd)
+    # 使用配置的环境变量运行命令
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        env=env,
+        check=False
+    )
+    if result.returncode != 0:
+        print(f"错误: 命令执行失败: {cmd}")
+        print(f"返回码: {result.returncode}")
+        sys.exit(1)
     
     # 获取所有安装的二进制文件
     cargo_bin = get_cargo_bin()
@@ -412,6 +455,24 @@ def install_targets():
     print("所有目标工具链安装完成!")
 
 
+def install_windows_targets():
+    """安装 Windows 目标工具链"""
+    print("正在安装 Windows 目标工具链...")
+    for target in WINDOWS_TARGETS:
+        print(f"  安装 {target}...")
+        run_command(f"rustup target add {target}", check=False)
+    print("所有 Windows 目标工具链安装完成!")
+
+
+def install_non_windows_targets():
+    """安装非 Windows 目标工具链（Linux）"""
+    print("正在安装非 Windows 目标工具链（Linux）...")
+    for target in NON_WINDOWS_TARGETS:
+        print(f"  安装 {target}...")
+        run_command(f"rustup target add {target}", check=False)
+    print("所有非 Windows 目标工具链安装完成!")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Rust 跨平台编译工具',
@@ -428,6 +489,8 @@ def main():
   python build.py add-tool ripgrep
   python build.py clean
   python build.py install-targets
+  python build.py install-windows-targets      # 只安装 Windows 目标工具链
+  python build.py install-non-windows-targets  # 只安装非 Windows 目标工具链
         """
     )
     
@@ -468,6 +531,12 @@ def main():
     # install-targets 命令
     subparsers.add_parser('install-targets', help='安装所有目标工具链')
     
+    # install-windows-targets 命令
+    subparsers.add_parser('install-windows-targets', help='安装 Windows 目标工具链')
+    
+    # install-non-windows-targets 命令
+    subparsers.add_parser('install-non-windows-targets', help='安装非 Windows 目标工具链（Linux）')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -495,6 +564,10 @@ def main():
         add_tool(args.tool)
     elif args.command == 'install-targets':
         install_targets()
+    elif args.command == 'install-windows-targets':
+        install_windows_targets()
+    elif args.command == 'install-non-windows-targets':
+        install_non_windows_targets()
 
 
 if __name__ == '__main__':

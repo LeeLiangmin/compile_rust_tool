@@ -36,7 +36,7 @@
    - Python 3.11+ (内置 `tomllib`)
    - 或 Python 3.x + `toml` 包: `pip install toml`
 
-3. **交叉编译工具链**
+3. **Rust 目标工具链**
    ```bash
    # 安装所有目标工具链
    python build.py install-targets
@@ -48,7 +48,37 @@
    rustup target add x86_64-unknown-linux-gnu
    ```
 
-4. **Python 依赖（可选）**
+4. **交叉编译链接器（必需）**
+   
+   为了进行交叉编译，需要安装相应的链接器工具链：
+   
+   **Linux (Ubuntu/Debian):**
+   ```bash
+   # 用于编译 aarch64-unknown-linux-gnu
+   sudo apt-get install gcc-aarch64-linux-gnu
+   
+   # 用于编译 x86_64-pc-windows-gnu
+   sudo apt-get install mingw-w64
+   ```
+   
+   **Linux (RHEL/CentOS/Fedora):**
+   ```bash
+   # 用于编译 aarch64-unknown-linux-gnu
+   sudo yum install gcc-aarch64-linux-gnu
+   # 或
+   sudo dnf install gcc-aarch64-linux-gnu
+   
+   # 用于编译 x86_64-pc-windows-gnu
+   sudo yum install mingw64-gcc
+   # 或
+   sudo dnf install mingw64-gcc
+   ```
+   
+   **注意:** 
+   - `x86_64-unknown-linux-gnu` 目标使用系统默认的 gcc，无需额外安装
+   - `x86_64-pc-windows-msvc` 目标需要在 Windows 系统上编译，或使用 wine + msvc 工具链
+
+5. **Python 依赖（可选）**
    ```bash
    # 如果使用 Python < 3.11，需要安装 toml 包
    pip install toml
