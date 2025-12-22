@@ -1,22 +1,36 @@
 
-install-toolchains:
-    python build.py install-targets
+# Python command based on OS: python3 on Linux, python on Windows
+python := if os() == 'windows' { 'python' } else { 'python3' }
+
+# install all toolchains
+iat:
+    {{python}} build.py install-targets
+
+# install windows toolchains
+iwt:
+    {{python}} build.py install-windows-targets
+
+# install non-windows toolchains
+inwt:
+    {{python}} build.py install-non-windows-targets
 
 
-build-all:
-    python build.py build-all
 
 
-build-windows:
-    python build.py build-windows
 
-build-non-windows:
-    python build.py build-non-windows
+# build all
+ba:
+    {{python}} build.py build-all
 
 
-build-grcov:
-    python build.py build grcov x86_64-pc-windows-msvc
-    python build.py build grcov x86_64-pc-windows-gnu
+# build windows
+bw:
+    {{python}} build.py build-windows
+
+# build non-windows
+bnw:
+    {{python}} build.py build-non-windows
+
 
 
 clean:
@@ -24,10 +38,10 @@ clean:
 
 
 post:
-    python post.py
+    {{python}} post.py
 
 
 download:
     # download rust-analyzer
-    python download.py --date 2025-12-15
+    {{python}} download.py --date 2025-12-15
 
