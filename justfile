@@ -24,8 +24,6 @@ inwt:
 
 
 
-
-
 # build all
 ba:
     {{python}} build.py build-all
@@ -40,7 +38,6 @@ bnw:
     {{python}} build.py build-non-windows
 
 
-
 clean:
     rm -rf dist
 
@@ -50,9 +47,6 @@ post:
 
 
 download:
-    # download rust-analyzer, mingw 
-    python download.py 
-
-
-
+    # download rust-analyzer
+    {{python}} download.py 
 
