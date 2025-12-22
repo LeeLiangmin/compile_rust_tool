@@ -1,0 +1,17 @@
+# Rust 工具编译配置
+# 添加新工具只需在此文件中添加一行配置即可
+
+[tools]
+# 性能分析工具
+flamegraph = { version = "latest" }
+
+# 代码搜索工具
+grcov = { version = "latest" }
+
+# 模糊测试工具
+cargo-fuzz = { version = "latest" }
+
+# 安全审计工具
+cargo-audit = { version = "latest" }
+
+
