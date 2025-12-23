@@ -4,7 +4,7 @@
 
 [tools]
 # 性能分析工具
-flamegraph = { version = "latest" }
+flamegraph = { version = "latest", compress = true, windows_format = "zip", non_windows_format = "tar.xz" }
 
 # 代码搜索工具
 grcov = { version = "latest" }
@@ -13,6 +13,11 @@ grcov = { version = "latest" }
 cargo-fuzz = { version = "latest" }
 
 # 安全审计工具
-cargo-audit = { version = "latest" }
+cargo-audit = { version = "latest", compress = true, windows_format = "zip", non_windows_format = "tar.xz" }
+
+# 压缩配置说明：
+# - compress: 是否压缩（默认 false，不压缩）
+# - windows_format: Windows 相关 target 的压缩格式，可选值: "zip", "7z"（默认 "zip"）
+# - non_windows_format: 非 Windows 相关 target 的压缩格式，可选值: "tar.gz", "tar.xz", "tar.bz2"（默认 "tar.gz"）
 
 

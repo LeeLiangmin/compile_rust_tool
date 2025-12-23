@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-后处理脚本：为 dist 目录下的编译产物创建 zip 文件
-对于 flamegraph 和 cargo-audit，将相关文件打包成 zip 文件
+后处理脚本：为 dist 目录下的编译产物创建压缩文件
+根据 tools.toml 配置决定是否压缩以及压缩格式
 """
 
 import os
 import json
 import zipfile
+import tarfile
 from pathlib import Path
 from datetime import datetime
 
@@ -23,8 +24,17 @@ TARGETS = [
     "x86_64-unknown-linux-gnu",
 ]
 
-# 需要打包的工具
-PACKAGE_TOOLS = ["flamegraph", "cargo-audit"]
+# Windows 目标平台列表
+WINDOWS_TARGETS = [
+    "x86_64-pc-windows-gnu",
+    "x86_64-pc-windows-msvc",
+]
+
+# 非 Windows 目标平台列表（Linux）
+NON_WINDOWS_TARGETS = [
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+]
 
 
 def load_tools_config():
@@ -51,37 +61,132 @@ def get_tool_version(tool_name):
     return config.get('tools', {}).get(tool_name, {}).get('version', 'unknown')
 
 
-def create_zip_for_tool(tool_dir, target_dir, target_name):
-    """为指定工具创建 zip 文件"""
-    tool_name = tool_dir.name
-    zip_path = target_dir / f"{tool_name}.zip"
+def get_tool_compress_config(tool_name):
+    """获取工具的压缩配置"""
+    config = load_tools_config()
+    tool_config = config.get('tools', {}).get(tool_name, {})
+    return {
+        'compress': tool_config.get('compress', False),  # 默认不压缩
+        'windows_format': tool_config.get('windows_format', 'zip'),  # 默认 zip
+        'non_windows_format': tool_config.get('non_windows_format', 'tar.gz'),  # 默认 tar.gz
+    }
+
+
+def is_windows_target(target_name):
+    """判断目标平台是否为 Windows"""
+    return target_name in WINDOWS_TARGETS
+
+
+def get_files_to_compress(tool_dir, target_dir, tool_name):
+    """获取需要压缩的文件列表"""
+    files_to_compress = []
+    # 排除已有的压缩文件
+    compressed_extensions = ['.zip', '.7z', '.tar.gz', '.tar.xz', '.tar.bz2', '.tgz', '.txz', '.tbz2']
     
-    # 查找需要打包的文件
-    files_to_zip = []
     for file in target_dir.iterdir():
-        if file.is_file() and not file.name.endswith('.zip'):
-            # 对于 flamegraph，打包 flamegraph 和 cargo-flamegraph
-            # 对于 cargo-audit，打包所有文件
-            if tool_name == "flamegraph":
-                file_name = file.name
-                if file_name.startswith("flamegraph") or file_name.startswith("cargo-flamegraph"):
-                    files_to_zip.append(file)
-            else:
-                # 其他工具打包所有文件
-                files_to_zip.append(file)
+        if file.is_file():
+            # 检查是否是压缩文件
+            is_compressed = any(file.name.endswith(ext) for ext in compressed_extensions)
+            if not is_compressed:
+                # 对于 flamegraph，打包 flamegraph 和 cargo-flamegraph
+                # 对于其他工具，打包所有文件
+                if tool_name == "flamegraph":
+                    file_name = file.name
+                    if file_name.startswith("flamegraph") or file_name.startswith("cargo-flamegraph"):
+                        files_to_compress.append(file)
+                else:
+                    # 其他工具打包所有文件
+                    files_to_compress.append(file)
     
-    if not files_to_zip:
-        print(f"  ⚠ 警告: {target_dir} 中没有找到需要打包的文件")
-        return
-    
-    # 创建 zip 文件
+    return files_to_compress
+
+
+def create_zip_archive(tool_name, target_dir, files_to_compress):
+    """创建 ZIP 压缩文件"""
+    zip_path = target_dir / f"{tool_name}.zip"
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for file in files_to_zip:
+        for file in files_to_compress:
             zipf.write(file, file.name)
             print(f"  ✓ 添加到 zip: {file.name}")
-    
     print(f"  ✓ 创建 zip: {zip_path}")
     return zip_path
+
+
+def create_7z_archive(tool_name, target_dir, files_to_compress):
+    """创建 7Z 压缩文件（需要 py7zr 库）"""
+    try:
+        import py7zr
+    except ImportError:
+        print(f"  ⚠ 警告: 需要 py7zr 库来创建 7z 文件，回退到 zip 格式")
+        return create_zip_archive(tool_name, target_dir, files_to_compress)
+    
+    zip_path = target_dir / f"{tool_name}.7z"
+    with py7zr.SevenZipFile(zip_path, 'w') as archive:
+        for file in files_to_compress:
+            archive.write(file, file.name)
+            print(f"  ✓ 添加到 7z: {file.name}")
+    print(f"  ✓ 创建 7z: {zip_path}")
+    return zip_path
+
+
+def create_tar_gz_archive(tool_name, target_dir, files_to_compress):
+    """创建 tar.gz 压缩文件"""
+    tar_path = target_dir / f"{tool_name}.tar.gz"
+    with tarfile.open(tar_path, 'w:gz') as tar:
+        for file in files_to_compress:
+            tar.add(file, arcname=file.name)
+            print(f"  ✓ 添加到 tar.gz: {file.name}")
+    print(f"  ✓ 创建 tar.gz: {tar_path}")
+    return tar_path
+
+
+def create_tar_xz_archive(tool_name, target_dir, files_to_compress):
+    """创建 tar.xz 压缩文件"""
+    tar_path = target_dir / f"{tool_name}.tar.xz"
+    with tarfile.open(tar_path, 'w:xz') as tar:
+        for file in files_to_compress:
+            tar.add(file, arcname=file.name)
+            print(f"  ✓ 添加到 tar.xz: {file.name}")
+    print(f"  ✓ 创建 tar.xz: {tar_path}")
+    return tar_path
+
+
+def create_tar_bz2_archive(tool_name, target_dir, files_to_compress):
+    """创建 tar.bz2 压缩文件"""
+    tar_path = target_dir / f"{tool_name}.tar.bz2"
+    with tarfile.open(tar_path, 'w:bz2') as tar:
+        for file in files_to_compress:
+            tar.add(file, arcname=file.name)
+            print(f"  ✓ 添加到 tar.bz2: {file.name}")
+    print(f"  ✓ 创建 tar.bz2: {tar_path}")
+    return tar_path
+
+
+def create_compressed_archive(tool_dir, target_dir, target_name, compress_format):
+    """根据指定格式创建压缩文件"""
+    tool_name = tool_dir.name
+    
+    # 获取需要压缩的文件
+    files_to_compress = get_files_to_compress(tool_dir, target_dir, tool_name)
+    
+    if not files_to_compress:
+        print(f"  ⚠ 警告: {target_dir} 中没有找到需要打包的文件")
+        return None
+    
+    # 根据格式创建压缩文件
+    if compress_format == 'zip':
+        return create_zip_archive(tool_name, target_dir, files_to_compress)
+    elif compress_format == '7z':
+        return create_7z_archive(tool_name, target_dir, files_to_compress)
+    elif compress_format == 'tar.gz':
+        return create_tar_gz_archive(tool_name, target_dir, files_to_compress)
+    elif compress_format == 'tar.xz':
+        return create_tar_xz_archive(tool_name, target_dir, files_to_compress)
+    elif compress_format == 'tar.bz2':
+        return create_tar_bz2_archive(tool_name, target_dir, files_to_compress)
+    else:
+        print(f"  ⚠ 警告: 不支持的压缩格式: {compress_format}，跳过压缩")
+        return None
 
 
 def get_files_in_directory(directory):
@@ -105,8 +210,9 @@ def process_tool(tool_dir, manifest_data):
     # 获取工具版本
     version = get_tool_version(tool_name)
     
-    # 检查是否是需要打包的工具
-    should_package = tool_name in PACKAGE_TOOLS
+    # 获取压缩配置
+    compress_config = get_tool_compress_config(tool_name)
+    should_compress = compress_config['compress']
     
     # 获取现有的目标平台目录
     existing_targets = set()
@@ -137,11 +243,17 @@ def process_tool(tool_dir, manifest_data):
         
         print(f"  目标平台: {target_name}")
         
-        # 如果是需要打包的工具，先创建 zip 文件
-        if should_package:
-            create_zip_for_tool(tool_dir, target_dir, target_name)
+        # 如果需要压缩，根据目标平台类型选择压缩格式
+        if should_compress:
+            if is_windows_target(target_name):
+                compress_format = compress_config['windows_format']
+            else:
+                compress_format = compress_config['non_windows_format']
+            
+            print(f"  压缩格式: {compress_format}")
+            create_compressed_archive(tool_dir, target_dir, target_name, compress_format)
         
-        # 收集该目标平台的文件列表（包括可能刚创建的 zip 文件）
+        # 收集该目标平台的文件列表（包括可能刚创建的压缩文件）
         files = get_files_in_directory(target_dir)
         tool_info['targets'][target_name] = {
             'files': files
@@ -168,7 +280,6 @@ def main():
         return
     
     print(f"开始处理 {DIST_DIR} 目录下的编译产物...")
-    print(f"需要打包的工具: {', '.join(PACKAGE_TOOLS)}")
     print("=" * 60)
     
     # 初始化清单数据

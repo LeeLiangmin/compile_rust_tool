@@ -1,5 +1,4 @@
 # 下载配置文件
-
 # 定义需要从 GitHub releases 下载的文件
 
 [downloads.rust-analyzer]
@@ -24,6 +23,4 @@ method = "tag"
 tag = "15.2.0-rt_v13-rev0"
 # 也可以使用 date
 # date = "2024-08-13"
-
-
 
